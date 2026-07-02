@@ -124,7 +124,7 @@
         .close-btn:hover{background:#E2E8F0}
         .modal-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:18px;border-top:1px solid #E2E8F0;margin-top:4px;flex-wrap:wrap}
 
-        .toast{position:fixed;bottom:24px;right:24px;background:#1E293B;color:#fff;padding:12px 20px;border-radius:12px;z-index:1100;opacity:0;transform:translateY(20px);transition:all .3s;max-width:380px;font-size:14px}
+        .toast{position:fixed;bottom:24px;right:24px;background:#1E293B;color:#fff;padding:12px 20px;border-radius:12px;z-index:1100;opacity:0;transform:translateY(20px);transition:all .3s;max-width:380px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
         .toast.show{opacity:1;transform:translateY(0)}
         .toast.success{background:#10B981}
         .toast.error{background:#EF4444}
@@ -137,6 +137,14 @@
         .hidden{display:none!important}
         .text-center{text-align:center}
         .text-muted{color:#94A3B8}
+        .fade-in{animation:fadeIn .3s ease}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+        /* INDICADOR DE ACTUALIZACIÓN */
+        .sync-indicator{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#94A3B8;padding:4px 12px;background:#F1F5F9;border-radius:20px}
+        .sync-indicator .fa-spin{font-size:12px}
+        .sync-indicator.success{color:#10B981;background:#ECFDF5}
+        .sync-indicator.error{color:#EF4444;background:#FEF2F2}
 
         @media (max-width:768px){
             .app-header{padding:0 20px;height:auto;flex-wrap:wrap;padding:10px 20px;gap:6px}
@@ -201,12 +209,12 @@
 
 <script>
 // ============================================================
-//  CONFIGURACIÓN - CACHE OPTIMIZADA
+//  CONFIGURACIÓN
 // ============================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbw2U4jjLX4BoGeRQ9iiush5OSut8goZ3jCwNiiB4bRtW7zqtavEXnXcwOYTkpCoHXRd/exec';
 const STORAGE_KEY = 'staffHubData';
 const STORAGE_TIMESTAMP_KEY = 'staffHubTimestamp';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+const CACHE_DURATION = 5 * 60 * 1000;
 
 // ============================================================
 //  ESTADO GLOBAL
@@ -217,6 +225,7 @@ let vistaActual = 'listado';
 let editMode = false;
 let editCode = null;
 let currentDetail = null;
+let actualizando = false;
 
 // ============================================================
 //  UTILIDADES
@@ -260,11 +269,11 @@ function formatearFecha(f) {
 }
 
 // ============================================================
-//  CARGA DE DATOS CON CACHE INTELIGENTE
+//  CARGA DE DATOS CON CACHE + ACTUALIZACIÓN RÁPIDA
 // ============================================================
 async function cargarDatos(force=false) {
     const loading = $('loadingListado') || $('loadingDash');
-    if(loading) loading.classList.add('active');
+    if(loading && !force) loading.classList.add('active');
 
     if(!force) {
         const cached = localStorage.getItem(STORAGE_KEY);
@@ -272,7 +281,6 @@ async function cargarDatos(force=false) {
         if(cached && ts && (Date.now() - parseInt(ts) < CACHE_DURATION)) {
             try {
                 datos = JSON.parse(cached);
-                toast('📦 Caché', 'info');
                 if(loading) loading.classList.remove('active');
                 return datos;
             } catch(e) {}
@@ -289,7 +297,6 @@ async function cargarDatos(force=false) {
             datos = result.data;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
             localStorage.setItem(STORAGE_TIMESTAMP_KEY, String(Date.now()));
-            toast('✅ Datos cargados', 'success');
             if(loading) loading.classList.remove('active');
             return datos;
         } else {
@@ -301,7 +308,7 @@ async function cargarDatos(force=false) {
         console.error(e);
         const fallback = localStorage.getItem(STORAGE_KEY);
         if(fallback) {
-            try { datos = JSON.parse(fallback); toast('📦 Caché offline', 'info'); if(loading) loading.classList.remove('active'); return datos; } catch(e2){}
+            try { datos = JSON.parse(fallback); if(loading) loading.classList.remove('active'); return datos; } catch(e2){}
         }
         toast('❌ Error: ' + e.message, 'error');
         if(loading) loading.classList.remove('active');
@@ -310,7 +317,61 @@ async function cargarDatos(force=false) {
 }
 
 // ============================================================
-//  FILTRO DE BÚSQUEDA (Nombres, Apellido Paterno, ID)
+//  ACTUALIZACIÓN RÁPIDA (sin recarga completa)
+// ============================================================
+async function refrescarDatos() {
+    if(actualizando) return;
+    actualizando = true;
+    
+    const indicator = document.querySelector('.sync-indicator');
+    if(indicator) {
+        indicator.className = 'sync-indicator';
+        indicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Actualizando...';
+    }
+
+    try {
+        const resp = await fetch(API_URL + '?action=list');
+        const texto = await resp.text();
+        let result;
+        try { result = JSON.parse(texto); } catch(e) { throw new Error('Respuesta no JSON'); }
+
+        if(result.success && result.data) {
+            datos = result.data;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
+            localStorage.setItem(STORAGE_TIMESTAMP_KEY, String(Date.now()));
+            
+            if(vistaActual === 'listado') {
+                renderTabla(datosFiltrados || datos);
+                actualizarContadores(datosFiltrados || datos);
+            } else if(vistaActual === 'dashboard') {
+                actualizarDashboard();
+            }
+            
+            if(indicator) {
+                indicator.className = 'sync-indicator success';
+                indicator.innerHTML = '<i class="fas fa-check-circle"></i> Actualizado';
+                setTimeout(() => {
+                    if(indicator) {
+                        indicator.className = 'sync-indicator';
+                        indicator.innerHTML = '<i class="fas fa-sync-alt fa-fw"></i> Sincronizado';
+                    }
+                }, 3000);
+            }
+            toast('✅ Datos actualizados', 'success');
+        }
+    } catch(e) {
+        toast('❌ Error: ' + e.message, 'error');
+        if(indicator) {
+            indicator.className = 'sync-indicator error';
+            indicator.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error';
+        }
+    } finally {
+        actualizando = false;
+    }
+}
+
+// ============================================================
+//  BUSCAR PERSONAL
 // ============================================================
 function buscarPersonal() {
     const busqueda = $('buscarDash')?.value.toLowerCase().trim() || '';
@@ -349,7 +410,7 @@ function renderTabla(data) {
     }
 
     tbody.innerHTML = mostrar.map(item => `
-        <tr>
+        <tr class="fade-in">
             <td>${esc(item.ID_PERSONAL)}</td>
             <td>${esc(item.APE_PATERNO)}</td>
             <td>${esc(item.APE_MATERNO)}</td>
@@ -369,29 +430,53 @@ function actualizarContadores(data) {
     ['totalPersonalListado','totalFiltrado'].forEach(id => {
         const el = $(id); if(el) el.textContent = mostrar.length;
     });
+    // Actualizar también el badge del header si existe
+    const badge = document.querySelector('.total-badge span');
+    if(badge) badge.textContent = datos.length;
 }
 
 // ============================================================
-//  CRUD - ELIMINAR
+//  CRUD - ELIMINAR (con actualización rápida)
 // ============================================================
 async function eliminarRegistro(code) {
     if(!confirm('⚠️ ¿Eliminar permanentemente?')) return;
+    
+    const row = document.querySelector(`tr button[onclick*="eliminarRegistro('${code}')"]`)?.closest('tr');
+    if(row) {
+        row.style.opacity = '0.5';
+        row.style.transition = 'opacity 0.3s';
+    }
+    
     toast('Eliminando...', 'info');
     try {
         const resp = await fetch(API_URL + '?action=delete&code=' + encodeURIComponent(code));
         const texto = await resp.text();
         let result;
         try { result = JSON.parse(texto); } catch(e) { result = { success: texto.includes('success') }; }
+        
         if(result.success) {
-            toast('✅ Eliminado', 'success');
-            datos = [];
-            datosFiltrados = null;
-            cambiarVista('listado');
+            // Eliminar localmente
+            const index = datos.findIndex(item => item.CODE === code);
+            if(index !== -1) {
+                datos.splice(index, 1);
+                // Si hay filtros aplicados, actualizar también
+                if(datosFiltrados) {
+                    const idx = datosFiltrados.findIndex(item => item.CODE === code);
+                    if(idx !== -1) datosFiltrados.splice(idx, 1);
+                }
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
+                renderTabla(datosFiltrados || datos);
+                actualizarContadores(datosFiltrados || datos);
+                if(vistaActual === 'dashboard') actualizarDashboard();
+                toast('✅ Registro eliminado', 'success');
+            }
         } else {
             toast('❌ ' + (result.message || 'Error'), 'error');
+            if(row) row.style.opacity = '1';
         }
     } catch(e) {
         toast('❌ ' + e.message, 'error');
+        if(row) row.style.opacity = '1';
     }
 }
 
@@ -482,6 +567,7 @@ function renderDashboard() {
             <h1>Dashboard de Personal</h1>
             <div class="topbar-actions">
                 <button class="btn btn-secondary" onclick="cambiarVista('listado')"><i class="fas fa-arrow-left"></i> Volver</button>
+                <button class="btn btn-outline" onclick="refrescarDatos()"><i class="fas fa-sync-alt"></i> Actualizar</button>
             </div>
         </div>
         <div id="loadingDash" class="loading"><div class="spinner"></div><p>Cargando...</p></div>
@@ -574,7 +660,7 @@ function actualizarDashboard() {
 }
 
 // ============================================================
-//  REGISTRO / EDICIÓN
+//  REGISTRO / EDICIÓN (con actualización rápida)
 // ============================================================
 function renderRegistro() {
     const isEdit = sessionStorage.getItem('editMode') === 'true';
@@ -684,11 +770,9 @@ async function guardarRegistro() {
             toast(editMode ? '✅ Actualizado' : '✅ Guardado', 'success');
             sessionStorage.removeItem('editData');
             sessionStorage.removeItem('editMode');
-            setTimeout(async () => {
-                datos = [];
-                datosFiltrados = null;
-                cambiarVista('listado');
-            }, 1000);
+            // Actualizar datos locales
+            await refrescarDatos();
+            cambiarVista('listado');
         } else {
             toast('❌ ' + (result.message || 'Error'), 'error');
         }
@@ -741,16 +825,18 @@ function renderListado() {
         </div>
         <div class="topbar">
             <h1>Lista de Personal</h1>
-            <div class="total-badge"><i class="fas fa-users"></i> Total <span id="totalPersonalListado">0</span></div>
+            <div class="total-badge"><i class="fas fa-users"></i> Total <span id="totalPersonalListado">${datos.length}</span></div>
         </div>
         <div class="action-bar">
             <div class="search-box"><i class="fas fa-search"></i><input type="text" id="buscarDash" placeholder="Buscar por Nombres, Apellido Paterno o ID..." oninput="buscarPersonal()"></div>
             <button class="btn btn-primary" onclick="cambiarVista('registro')"><i class="fas fa-plus"></i> Nuevo</button>
             <button class="btn btn-outline" onclick="cambiarVista('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</button>
             <button class="btn btn-success" onclick="exportarCSV()"><i class="fas fa-file-csv"></i> CSV</button>
+            <button class="btn btn-secondary" onclick="refrescarDatos()" title="Sincronizar con servidor"><i class="fas fa-sync-alt"></i></button>
+            <span class="sync-indicator"><i class="fas fa-check-circle"></i> Sincronizado</span>
         </div>
         <div class="contadores">
-            <span class="contador-item">📊 Mostrando: <strong id="totalFiltrado">0</strong> registros</span>
+            <span class="contador-item">📊 Mostrando: <strong id="totalFiltrado">${datos.length}</strong> registros</span>
         </div>
         <div id="loadingListado" class="loading"><div class="spinner"></div><p>Cargando...</p></div>
         <div class="table-container">
@@ -761,8 +847,8 @@ function renderListado() {
         </div>
     `;
     cargarDatos().then(() => {
-        if(datosFiltrados !== null) buscarPersonal();
-        else { renderTabla(datos); actualizarContadores(datos); }
+        renderTabla(datos);
+        actualizarContadores(datos);
     });
 }
 
