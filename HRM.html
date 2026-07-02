@@ -109,7 +109,7 @@
         .btn-copy:hover{color:#8B5CF6}
         .btn-schedule:hover{color:#8B5CF6}
 
-        /* TABLA HORARIOS - NUEVO ESTILO */
+        /* TABLA HORARIOS */
         .horario-fila{display:flex;flex-direction:column;gap:4px;padding:4px 0}
         .horario-nombre{font-size:16px;font-weight:700;color:#1E293B}
         .horario-dias{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:13px;color:#64748B}
@@ -117,12 +117,12 @@
         .horario-dias .dia-item .dia-nombre{font-weight:600;color:#3B82F6}
         .horario-dias .dia-item .hora{font-weight:500;color:#1E293B}
         .horario-dias .dia-item .ref{color:#94A3B8;font-size:12px}
-        .horario-dias .separador{color:#E2E8F0;font-size:12px}
 
         .badge-horas{display:inline-block;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700}
         .badge-horas.excede{background:#FEF2F2;color:#EF4444}
         .badge-horas.completo{background:#ECFDF5;color:#10B981}
         .badge-horas.faltan{background:#FEFCE8;color:#CA8A04}
+        .badge-horas.vacio{background:#F1F5F9;color:#94A3B8}
 
         /* FORMULARIO */
         .form-container{background:#fff;border-radius:20px;border:1px solid #E2E8F0;padding:28px}
@@ -676,7 +676,7 @@ function renderContenidoHorarios() {
                 <div class="form-group">
                     <label>Trabajador <span class="required">*</span></label>
                     <select id="selectTrabajadorHorarios">
-                        <option value="">Seleccionar...</option>
+                        <option value="">Seleccionar trabajador...</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -728,7 +728,7 @@ function renderContenidoHorarios() {
                     <tr>
                         <th style="min-width:180px;">Trabajador</th>
                         <th>Horarios</th>
-                        <th style="min-width:100px;">Total Semanal</th>
+                        <th style="min-width:120px;">Total Semanal</th>
                         <th style="min-width:100px;">Acciones</th>
                     </tr>
                 </thead>
@@ -1134,14 +1134,17 @@ function renderHorariosTabla() {
 
     const mostrar = horariosFiltrados || horarios;
 
-    // Agrupar por trabajador
+    // AGRUPAR POR TRABAJADOR - SOLO LOS QUE TIENEN HORARIO
     const trabajadoresMap = new Map();
     mostrar.forEach(h => {
+        // Asegurar que el horario tiene datos válidos
+        if(!h || !h.code || !h.dia) return;
+        
         if(!trabajadoresMap.has(h.code)) {
             trabajadoresMap.set(h.code, {
                 code: h.code,
-                nombre: h.nombre,
-                idPersonal: h.idPersonal,
+                nombre: h.nombre || 'Sin nombre',
+                idPersonal: h.idPersonal || '',
                 horarios: []
             });
         }
@@ -1174,28 +1177,28 @@ function renderHorariosTabla() {
             badgeClass += ' faltan';
             badgeText += ` ⏳ Faltan ${(HORAS_SEMANALES - horasTotales).toFixed(1)}h`;
         } else {
-            badgeClass += ' faltan';
+            badgeClass += ' vacio';
             badgeText = 'Sin horarios';
         }
         
         // Construir días en una línea
-        const diasHTML = trabajador.horarios
-            .sort((a, b) => {
-                const orden = ['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO'];
-                return orden.indexOf(a.dia) - orden.indexOf(b.dia);
-            })
-            .map(h => {
-                const ref = h.refrigerioInicio && h.refrigerioFin ? 
-                    `${h.refrigerioInicio}-${h.refrigerioFin}` : '—';
-                return `
-                    <span class="dia-item">
-                        <span class="dia-nombre">${esc(h.dia)}</span>
-                        <span class="hora">${h.entrada}</span>
-                        <span class="ref">🍽️ ${ref}</span>
-                        <span class="hora">${h.salida}</span>
-                    </span>
-                `;
-            }).join(' ');
+        const ordenDias = ['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO'];
+        const diasOrdenados = [...trabajador.horarios].sort((a, b) => 
+            ordenDias.indexOf(a.dia) - ordenDias.indexOf(b.dia)
+        );
+        
+        const diasHTML = diasOrdenados.map(h => {
+            const ref = h.refrigerioInicio && h.refrigerioFin ? 
+                `${h.refrigerioInicio}-${h.refrigerioFin}` : '—';
+            return `
+                <span class="dia-item">
+                    <span class="dia-nombre">${esc(h.dia)}</span>
+                    <span class="hora">${h.entrada || '--:--'}</span>
+                    <span class="ref">🍽️ ${ref}</span>
+                    <span class="hora">${h.salida || '--:--'}</span>
+                </span>
+            `;
+        }).join('');
         
         // Contar días registrados
         const diasRegistrados = trabajador.horarios.length;
@@ -1239,15 +1242,17 @@ function actualizarContadoresHorarios() {
 
     if(total) total.textContent = mostrar.length;
     
-    // Contar trabajadores únicos con horario
+    // Contar trabajadores únicos con horario (solo los que tienen datos válidos)
     const codigosUnicos = new Set();
-    mostrar.forEach(h => codigosUnicos.add(h.code));
+    mostrar.forEach(h => {
+        if(h && h.code) codigosUnicos.add(h.code);
+    });
     if(totalConHorario) totalConHorario.textContent = codigosUnicos.size;
     
     if(codigosUnicos.size > 0 && totalHorasSemana) {
         let totalHoras = 0;
         codigosUnicos.forEach(code => {
-            const horariosTrabajador = mostrar.filter(h => h.code === code);
+            const horariosTrabajador = mostrar.filter(h => h && h.code === code);
             const horas = calcularHorasSemanales(horariosTrabajador);
             totalHoras += horas;
         });
@@ -1377,7 +1382,6 @@ function abrirEditarHorarioPorTrabajador(code) {
         return;
     }
 
-    // Mostrar todos los días para editar
     let mensaje = 'Editar horarios:\n\n';
     const orden = ['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO'];
     horariosTrabajador.sort((a, b) => orden.indexOf(a.dia) - orden.indexOf(b.dia));
