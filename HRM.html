@@ -23,6 +23,13 @@
         .user-menu{width:36px;height:36px;background:#F1F5F9;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer}
         .user-menu i{color:#64748B;font-size:20px}
 
+        /* SUB-NAV (pestañas internas) */
+        .sub-nav{display:flex;gap:4px;background:#F1F5F9;border-radius:12px;padding:4px;margin-bottom:20px;flex-wrap:wrap}
+        .sub-nav .tab{text-decoration:none;color:#64748B;font-size:14px;font-weight:500;padding:8px 20px;border-radius:8px;cursor:pointer;transition:all .2s;background:0;border:0;font-family:inherit}
+        .sub-nav .tab:hover{background:#E2E8F0;color:#1E293B}
+        .sub-nav .tab.active{background:#fff;color:#3B82F6;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+        .sub-nav .tab i{margin-right:6px}
+
         /* MAIN CONTENT */
         .main-content{flex:1;padding:24px 32px;max-width:1400px;margin:0 auto;width:100%}
         .breadcrumbs{display:flex;align-items:center;gap:8px;margin-bottom:24px;font-size:13px;flex-wrap:wrap}
@@ -125,7 +132,7 @@
         .close-btn:hover{background:#E2E8F0}
         .modal-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:18px;border-top:1px solid #E2E8F0;margin-top:4px;flex-wrap:wrap}
 
-        .toast{position:fixed;bottom:24px;right:24px;background:#1E293B;color:#fff;padding:12px 20px;border-radius:12px;z-index:1100;opacity:0;transform:translateY(20px);transition:all .3s;max-width:380px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+        .toast{position:fixed;bottom:24px;right:24px;background:#1E293B;color:#fff;padding:12px 20px;border-radius:12px;z-index:1100;opacity:0;transform:translateY(20px);transition:all .3s;max-width:380px;font-size:14px}
         .toast.show{opacity:1;transform:translateY(0)}
         .toast.success{background:#10B981}
         .toast.error{background:#EF4444}
@@ -138,14 +145,23 @@
         .hidden{display:none!important}
         .text-center{text-align:center}
         .text-muted{color:#94A3B8}
-        .fade-in{animation:fadeIn .3s ease}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-        /* INDICADOR DE ACTUALIZACIÓN */
-        .sync-indicator{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#94A3B8;padding:4px 12px;background:#F1F5F9;border-radius:20px}
-        .sync-indicator .fa-spin{font-size:12px}
-        .sync-indicator.success{color:#10B981;background:#ECFDF5}
-        .sync-indicator.error{color:#EF4444;background:#FEF2F2}
+        /* Contenedor de pestañas */
+        .tab-content{display:none}
+        .tab-content.active{display:block}
+
+        /* Estilos de horarios (para la pestaña) */
+        .alert-box{padding:12px 16px;border-radius:10px;margin-top:12px;font-size:14px;font-weight:500}
+        .alert-success{background:#ECFDF5;color:#10B981;border:1px solid #A7F3D0}
+        .alert-warning{background:#FEFCE8;color:#CA8A04;border:1px solid #FDE68A}
+        .alert-danger{background:#FEF2F2;color:#EF4444;border:1px solid #FCA5A5}
+        .alert-info{background:#EFF6FF;color:#3B82F6;border:1px solid #93C5FD}
+
+        .badge-yellow{background:#FEFCE8;color:#CA8A04}
+
+        .schedule-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+        .schedule-form-grid .form-group{display:flex;flex-direction:column;gap:4px}
+        .schedule-form-grid .form-group label{font-size:12px;font-weight:600;color:#64748B}
 
         @media (max-width:768px){
             .app-header{padding:0 20px;height:auto;flex-wrap:wrap;padding:10px 20px;gap:6px}
@@ -169,6 +185,9 @@
             table{min-width:360px;font-size:12px}
             th,td{padding:6px 8px;font-size:12px}
             .action-btn{width:24px;height:24px;font-size:12px}
+            .sub-nav{flex-wrap:wrap}
+            .sub-nav .tab{font-size:12px;padding:6px 12px}
+            .schedule-form-grid{grid-template-columns:1fr}
         }
     </style>
 </head>
@@ -210,12 +229,12 @@
 
 <script>
 // ============================================================
-//  CONFIGURACIÓN
+//  CONFIGURACIÓN - CACHE OPTIMIZADA
 // ============================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbw2U4jjLX4BoGeRQ9iiush5OSut8goZ3jCwNiiB4bRtW7zqtavEXnXcwOYTkpCoHXRd/exec';
 const STORAGE_KEY = 'staffHubData';
 const STORAGE_TIMESTAMP_KEY = 'staffHubTimestamp';
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
 // ============================================================
 //  ESTADO GLOBAL
@@ -223,10 +242,11 @@ const CACHE_DURATION = 5 * 60 * 1000;
 let datos = [];
 let datosFiltrados = null;
 let vistaActual = 'listado';
+let subVistaActual = 'personal'; // 'personal' o 'horarios'
 let editMode = false;
 let editCode = null;
 let currentDetail = null;
-let actualizando = false;
+let trabajadorSeleccionado = null; // Para preseleccionar en horarios
 
 // ============================================================
 //  UTILIDADES
@@ -270,11 +290,11 @@ function formatearFecha(f) {
 }
 
 // ============================================================
-//  CARGA DE DATOS CON CACHE + ACTUALIZACIÓN RÁPIDA
+//  CARGA DE DATOS CON CACHE INTELIGENTE
 // ============================================================
 async function cargarDatos(force=false) {
     const loading = $('loadingListado') || $('loadingDash');
-    if(loading && !force) loading.classList.add('active');
+    if(loading) loading.classList.add('active');
 
     if(!force) {
         const cached = localStorage.getItem(STORAGE_KEY);
@@ -282,6 +302,7 @@ async function cargarDatos(force=false) {
         if(cached && ts && (Date.now() - parseInt(ts) < CACHE_DURATION)) {
             try {
                 datos = JSON.parse(cached);
+                toast('📦 Caché', 'info');
                 if(loading) loading.classList.remove('active');
                 return datos;
             } catch(e) {}
@@ -298,6 +319,7 @@ async function cargarDatos(force=false) {
             datos = result.data;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
             localStorage.setItem(STORAGE_TIMESTAMP_KEY, String(Date.now()));
+            toast('✅ Datos cargados', 'success');
             if(loading) loading.classList.remove('active');
             return datos;
         } else {
@@ -309,7 +331,7 @@ async function cargarDatos(force=false) {
         console.error(e);
         const fallback = localStorage.getItem(STORAGE_KEY);
         if(fallback) {
-            try { datos = JSON.parse(fallback); if(loading) loading.classList.remove('active'); return datos; } catch(e2){}
+            try { datos = JSON.parse(fallback); toast('📦 Caché offline', 'info'); if(loading) loading.classList.remove('active'); return datos; } catch(e2){}
         }
         toast('❌ Error: ' + e.message, 'error');
         if(loading) loading.classList.remove('active');
@@ -318,64 +340,10 @@ async function cargarDatos(force=false) {
 }
 
 // ============================================================
-//  ACTUALIZACIÓN RÁPIDA (sin recarga completa)
-// ============================================================
-async function refrescarDatos() {
-    if(actualizando) return;
-    actualizando = true;
-    
-    const indicator = document.querySelector('.sync-indicator');
-    if(indicator) {
-        indicator.className = 'sync-indicator';
-        indicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Actualizando...';
-    }
-
-    try {
-        const resp = await fetch(API_URL + '?action=list');
-        const texto = await resp.text();
-        let result;
-        try { result = JSON.parse(texto); } catch(e) { throw new Error('Respuesta no JSON'); }
-
-        if(result.success && result.data) {
-            datos = result.data;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
-            localStorage.setItem(STORAGE_TIMESTAMP_KEY, String(Date.now()));
-            
-            if(vistaActual === 'listado') {
-                renderTabla(datosFiltrados || datos);
-                actualizarContadores(datosFiltrados || datos);
-            } else if(vistaActual === 'dashboard') {
-                actualizarDashboard();
-            }
-            
-            if(indicator) {
-                indicator.className = 'sync-indicator success';
-                indicator.innerHTML = '<i class="fas fa-check-circle"></i> Actualizado';
-                setTimeout(() => {
-                    if(indicator) {
-                        indicator.className = 'sync-indicator';
-                        indicator.innerHTML = '<i class="fas fa-sync-alt fa-fw"></i> Sincronizado';
-                    }
-                }, 3000);
-            }
-            toast('✅ Datos actualizados', 'success');
-        }
-    } catch(e) {
-        toast('❌ Error: ' + e.message, 'error');
-        if(indicator) {
-            indicator.className = 'sync-indicator error';
-            indicator.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error';
-        }
-    } finally {
-        actualizando = false;
-    }
-}
-
-// ============================================================
-//  BUSCAR PERSONAL
+//  BUSCAR PERSONAL (solo por ID, Nombres y Apellidos)
 // ============================================================
 function buscarPersonal() {
-    const busqueda = $('buscarDash')?.value.toLowerCase().trim() || '';
+    const busqueda = document.getElementById('buscarPersonal')?.value.toLowerCase().trim() || '';
 
     if(!busqueda) {
         datosFiltrados = null;
@@ -385,7 +353,7 @@ function buscarPersonal() {
     }
 
     datosFiltrados = datos.filter(item => {
-        const texto = `${item.NOMBRES||''} ${item.APE_PATERNO||''} ${item.ID_PERSONAL||''}`.toLowerCase();
+        const texto = `${item.ID_PERSONAL||''} ${item.NOMBRES||''} ${item.APE_PATERNO||''} ${item.APE_MATERNO||''}`.toLowerCase();
         return texto.includes(busqueda);
     });
 
@@ -411,7 +379,7 @@ function renderTabla(data) {
     }
 
     tbody.innerHTML = mostrar.map(item => `
-        <tr class="fade-in">
+        <tr>
             <td>${esc(item.ID_PERSONAL)}</td>
             <td>${esc(item.APE_PATERNO)}</td>
             <td>${esc(item.APE_MATERNO)}</td>
@@ -423,10 +391,24 @@ function renderTabla(data) {
                 <button class="action-btn btn-copy" onclick='copiarDatos(${JSON.stringify(item).replace(/'/g,"&#39;")})' title="Copiar">📋</button>
             </td>
             <td>
-                <button class="action-btn btn-schedule" onclick='verHorario(${JSON.stringify(item).replace(/'/g,"&#39;")})' title="Horario">🕐</button>
+                <button class="action-btn btn-schedule" onclick='verHorarioDesdeLista(${JSON.stringify(item).replace(/'/g,"&#39;")})' title="Horario">🕐</button>
             </td>
         </tr>
     `).join('');
+}
+
+// ============================================================
+//  NUEVA FUNCIÓN: HORARIO - Selecciona trabajador y cambia a pestaña
+// ============================================================
+function verHorarioDesdeLista(data) {
+    // Guardar el trabajador seleccionado
+    trabajadorSeleccionado = data;
+    
+    // Cambiar a la pestaña de horarios
+    subVistaActual = 'horarios';
+    cambiarSubVista('horarios');
+    
+    toast(`🕐 Horario de ${data.NOMBRES} ${data.APE_PATERNO}`, 'info');
 }
 
 function actualizarContadores(data) {
@@ -434,63 +416,29 @@ function actualizarContadores(data) {
     ['totalPersonalListado','totalFiltrado'].forEach(id => {
         const el = $(id); if(el) el.textContent = mostrar.length;
     });
-    // Actualizar también el badge del header si existe
-    const badge = document.querySelector('.total-badge span');
-    if(badge) badge.textContent = datos.length;
 }
 
 // ============================================================
-//  NUEVA FUNCIÓN: HORARIO
-// ============================================================
-function verHorario(data) {
-    toast(`🕐 Horario de ${data.NOMBRES||''} ${data.APE_PATERNO||''}`, 'info');
-    // Aquí se puede agregar la lógica para mostrar el horario
-    // Esta función está preparada para futuras operaciones
-    console.log('Horario del trabajador:', data);
-}
-
-// ============================================================
-//  CRUD - ELIMINAR (con actualización rápida)
+//  CRUD - ELIMINAR
 // ============================================================
 async function eliminarRegistro(code) {
     if(!confirm('⚠️ ¿Eliminar permanentemente?')) return;
-    
-    const row = document.querySelector(`tr button[onclick*="eliminarRegistro('${code}')"]`)?.closest('tr');
-    if(row) {
-        row.style.opacity = '0.5';
-        row.style.transition = 'opacity 0.3s';
-    }
-    
     toast('Eliminando...', 'info');
     try {
         const resp = await fetch(API_URL + '?action=delete&code=' + encodeURIComponent(code));
         const texto = await resp.text();
         let result;
         try { result = JSON.parse(texto); } catch(e) { result = { success: texto.includes('success') }; }
-        
         if(result.success) {
-            // Eliminar localmente
-            const index = datos.findIndex(item => item.CODE === code);
-            if(index !== -1) {
-                datos.splice(index, 1);
-                // Si hay filtros aplicados, actualizar también
-                if(datosFiltrados) {
-                    const idx = datosFiltrados.findIndex(item => item.CODE === code);
-                    if(idx !== -1) datosFiltrados.splice(idx, 1);
-                }
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
-                renderTabla(datosFiltrados || datos);
-                actualizarContadores(datosFiltrados || datos);
-                if(vistaActual === 'dashboard') actualizarDashboard();
-                toast('✅ Registro eliminado', 'success');
-            }
+            toast('✅ Eliminado', 'success');
+            datos = [];
+            datosFiltrados = null;
+            cambiarVista('listado');
         } else {
             toast('❌ ' + (result.message || 'Error'), 'error');
-            if(row) row.style.opacity = '1';
         }
     } catch(e) {
         toast('❌ ' + e.message, 'error');
-        if(row) row.style.opacity = '1';
     }
 }
 
@@ -520,6 +468,7 @@ function editarDesdeDetalle() {
 function editarRegistro(data) {
     sessionStorage.setItem('editData', JSON.stringify(data));
     sessionStorage.setItem('editMode', 'true');
+    subVistaActual = 'personal';
     cambiarVista('registro');
 }
 
@@ -571,17 +520,18 @@ function exportarCSV() {
 //  DASHBOARD
 // ============================================================
 function renderDashboard() {
+    subVistaActual = 'personal';
     $('mainContent').innerHTML = `
         <div class="breadcrumbs">
             <a href="index.html">Inicio</a> <i class="fas fa-chevron-right"></i>
             <a onclick="cambiarVista('listado')">Gestión Personal</a> <i class="fas fa-chevron-right"></i>
             <span class="current">Dashboard</span>
         </div>
+        ${renderSubNav()}
         <div class="topbar">
             <h1>Dashboard de Personal</h1>
             <div class="topbar-actions">
                 <button class="btn btn-secondary" onclick="cambiarVista('listado')"><i class="fas fa-arrow-left"></i> Volver</button>
-                <button class="btn btn-outline" onclick="refrescarDatos()"><i class="fas fa-sync-alt"></i> Actualizar</button>
             </div>
         </div>
         <div id="loadingDash" class="loading"><div class="spinner"></div><p>Cargando...</p></div>
@@ -607,7 +557,6 @@ function actualizarDashboard() {
     const data = datos || [];
     if(!data.length) { document.querySelectorAll('.number').forEach(el => el.textContent='0'); return; }
     
-    // Cumpleaños
     const mes = new Date().getMonth() + 1;
     const cumples = data.filter(item => {
         if(!item.FEC_NACIMIENTO) return false;
@@ -620,7 +569,6 @@ function actualizarDashboard() {
         `<div class="item"><span class="label">${esc(item.NOMBRES||'')} ${esc(item.APE_PATERNO||'')}</span><span class="value">${formatearFecha(item.FEC_NACIMIENTO)}</span></div>`
     ).join('') : '<div class="item"><span class="label" style="color:#94A3B8;">Sin cumpleaños</span></div>';
 
-    // Género
     const gen = {h:0,m:0};
     data.forEach(item => {
         const s = String(item.SEXO||'').toUpperCase().trim();
@@ -633,7 +581,6 @@ function actualizarDashboard() {
     $('badgeHombres').textContent = `Hombres: ${gen.h}`;
     $('badgeMujeres').textContent = `Mujeres: ${gen.m}`;
 
-    // Educación
     const edu = {u:0,n:0,s:0};
     data.forEach(item => {
         const e = String(item.EDUCACION_SUPERIOR||'').toUpperCase().trim();
@@ -646,7 +593,6 @@ function actualizarDashboard() {
     $('educacionSinEspecificar').textContent = edu.s;
     $('badgeUniversitarios').textContent = `Universitarios: ${edu.u}`;
 
-    // Cargos
     const car = {t1:0,t2:0,o:0};
     data.forEach(item => {
         const c = String(item.CARGO||'').toUpperCase().trim();
@@ -658,7 +604,6 @@ function actualizarDashboard() {
     $('tecnico2').textContent = car.t2;
     $('otrosCargos').textContent = car.o;
 
-    // Contratos
     const cont = {p:0,t:0,s:0};
     data.forEach(item => {
         const c = String(item.TIPO_CONTRATO||'').toUpperCase().trim();
@@ -674,7 +619,184 @@ function actualizarDashboard() {
 }
 
 // ============================================================
-//  REGISTRO / EDICIÓN (con actualización rápida)
+//  SUB-NAVEGACIÓN (Pestañas)
+// ============================================================
+function renderSubNav() {
+    return `
+        <div class="sub-nav">
+            <button class="tab ${subVistaActual === 'personal' ? 'active' : ''}" onclick="cambiarSubVista('personal')">
+                <i class="fas fa-users"></i> Personal
+            </button>
+            <button class="tab ${subVistaActual === 'horarios' ? 'active' : ''}" onclick="cambiarSubVista('horarios')">
+                <i class="fas fa-clock"></i> Horarios
+            </button>
+        </div>
+        <div id="tabPersonal" class="tab-content ${subVistaActual === 'personal' ? 'active' : ''}">
+            ${renderContenidoPersonal()}
+        </div>
+        <div id="tabHorarios" class="tab-content ${subVistaActual === 'horarios' ? 'active' : ''}">
+            ${renderContenidoHorarios()}
+        </div>
+    `;
+}
+
+function renderContenidoPersonal() {
+    return `
+        <div class="topbar">
+            <h1>Lista de Personal</h1>
+            <div class="total-badge"><i class="fas fa-users"></i> Total <span id="totalPersonalListado">0</span></div>
+        </div>
+        <div class="action-bar">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="buscarPersonal" placeholder="Buscar por ID, Nombres o Apellidos..." oninput="buscarPersonal()">
+            </div>
+            <button class="btn btn-primary" onclick="cambiarVista('registro')"><i class="fas fa-plus"></i> Nuevo</button>
+            <button class="btn btn-outline" onclick="cambiarVista('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</button>
+            <button class="btn btn-success" onclick="exportarCSV()"><i class="fas fa-file-csv"></i> CSV</button>
+        </div>
+        <div class="contadores">
+            <span class="contador-item">📊 Mostrando: <strong id="totalFiltrado">0</strong> registros</span>
+        </div>
+        <div id="loadingListado" class="loading"><div class="spinner"></div><p>Cargando...</p></div>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>ID Personal</th><th>Apellido Paterno</th><th>Apellido Materno</th><th>Nombres</th><th>Acciones</th><th>Operaciones</th></tr></thead>
+                <tbody id="tbodyListado"></tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderContenidoHorarios() {
+    return `
+        <div class="topbar">
+            <h1>Gestión de Horarios</h1>
+            <div class="topbar-actions">
+                <button class="btn btn-success" onclick="cargarHorarios()"><i class="fas fa-sync-alt"></i> Sincronizar</button>
+                <button class="btn btn-outline" onclick="exportarHorariosCSV()"><i class="fas fa-file-csv"></i> Exportar CSV</button>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <h3><i class="fas fa-calendar-plus"></i> Asignar Horario</h3>
+            <div class="schedule-form-grid">
+                <div class="form-group">
+                    <label>Trabajador <span class="required">*</span></label>
+                    <select id="selectTrabajadorHorarios">
+                        <option value="">Seleccionar...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Día <span class="required">*</span></label>
+                    <select id="selectDiaHorarios">
+                        <option value="LUNES">LUNES</option>
+                        <option value="MARTES">MARTES</option>
+                        <option value="MIERCOLES">MIÉRCOLES</option>
+                        <option value="JUEVES">JUEVES</option>
+                        <option value="VIERNES">VIERNES</option>
+                        <option value="SABADO">SÁBADO</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Hora Entrada <span class="required">*</span></label>
+                    <input type="time" id="horaEntradaHorarios" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label>Inicio Refrigerio</label>
+                    <input type="time" id="horaRefrigerioInicioHorarios" value="12:00">
+                </div>
+                <div class="form-group">
+                    <label>Fin Refrigerio</label>
+                    <input type="time" id="horaRefrigerioFinHorarios" value="13:00">
+                </div>
+                <div class="form-group">
+                    <label>Hora Salida <span class="required">*</span></label>
+                    <input type="time" id="horaSalidaHorarios" value="17:00">
+                </div>
+            </div>
+            <div id="alertFormularioHorarios" class="alert-box alert-info" style="display:none;"></div>
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="limpiarFormularioHorarios()"><i class="fas fa-eraser"></i> Limpiar</button>
+                <button class="btn btn-primary" onclick="guardarHorario()"><i class="fas fa-save"></i> Guardar Horario</button>
+            </div>
+        </div>
+
+        <div class="contadores">
+            <span class="contador-item">📊 Total Horarios: <strong id="totalHorarios">0</strong></span>
+            <span class="contador-item">⏱️ Horas Semanales: <strong id="totalHorasSemana">0</strong>h</span>
+            <span class="contador-item" id="estadoHorasSemana">✅ <strong>Completo</strong></span>
+        </div>
+
+        <div id="loadingHorarios" class="loading"><div class="spinner"></div><p>Cargando horarios...</p></div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Trabajador</th>
+                        <th>ID Personal</th>
+                        <th>Día</th>
+                        <th>Entrada</th>
+                        <th>Refrigerio</th>
+                        <th>Salida</th>
+                        <th>Horas</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyHorarios">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:24px;">Cargando horarios...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// ============================================================
+//  CAMBIAR SUB-VISTA
+// ============================================================
+function cambiarSubVista(subVista) {
+    subVistaActual = subVista;
+    
+    document.querySelectorAll('.sub-nav .tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.sub-nav .tab').forEach(tab => {
+        if((subVista === 'personal' && tab.textContent.includes('Personal')) ||
+           (subVista === 'horarios' && tab.textContent.includes('Horarios'))) {
+            tab.classList.add('active');
+        }
+    });
+    
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    const target = subVista === 'personal' ? 'tabPersonal' : 'tabHorarios';
+    const el = document.getElementById(target);
+    if(el) el.classList.add('active');
+    
+    if(subVista === 'horarios') {
+        if(typeof horarios === 'undefined' || horarios.length === 0) {
+            cargarHorarios();
+        }
+        // Actualizar select y preseleccionar trabajador
+        actualizarSelectTrabajadoresHorarios();
+        // Si hay un trabajador seleccionado, preseleccionarlo
+        if(trabajadorSeleccionado) {
+            const select = document.getElementById('selectTrabajadorHorarios');
+            if(select) {
+                select.value = trabajadorSeleccionado.CODE;
+                // Disparar evento change para actualizar
+                const event = new Event('change');
+                select.dispatchEvent(event);
+                // Limpiar después de preseleccionar
+                setTimeout(() => {
+                    trabajadorSeleccionado = null;
+                }, 500);
+            }
+        }
+    }
+}
+
+// ============================================================
+//  REGISTRO / EDICIÓN
 // ============================================================
 function renderRegistro() {
     const isEdit = sessionStorage.getItem('editMode') === 'true';
@@ -784,9 +906,11 @@ async function guardarRegistro() {
             toast(editMode ? '✅ Actualizado' : '✅ Guardado', 'success');
             sessionStorage.removeItem('editData');
             sessionStorage.removeItem('editMode');
-            // Actualizar datos locales
-            await refrescarDatos();
-            cambiarVista('listado');
+            setTimeout(async () => {
+                datos = [];
+                datosFiltrados = null;
+                cambiarVista('listado');
+            }, 1000);
         } else {
             toast('❌ ' + (result.message || 'Error'), 'error');
         }
@@ -828,37 +952,17 @@ function cambiarVista(vista) {
 }
 
 // ============================================================
-//  RENDER LISTADO
+//  RENDER LISTADO (con pestañas)
 // ============================================================
 function renderListado() {
+    subVistaActual = 'personal';
     $('mainContent').innerHTML = `
         <div class="breadcrumbs">
             <a href="index.html">Inicio</a> <i class="fas fa-chevron-right"></i>
             <a onclick="cambiarVista('listado')">Gestión Personal</a> <i class="fas fa-chevron-right"></i>
             <span class="current">Listado de Personal</span>
         </div>
-        <div class="topbar">
-            <h1>Lista de Personal</h1>
-            <div class="total-badge"><i class="fas fa-users"></i> Total <span id="totalPersonalListado">${datos.length}</span></div>
-        </div>
-        <div class="action-bar">
-            <div class="search-box"><i class="fas fa-search"></i><input type="text" id="buscarDash" placeholder="Buscar por Nombres, Apellido Paterno o ID..." oninput="buscarPersonal()"></div>
-            <button class="btn btn-primary" onclick="cambiarVista('registro')"><i class="fas fa-plus"></i> Nuevo</button>
-            <button class="btn btn-outline" onclick="cambiarVista('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</button>
-            <button class="btn btn-success" onclick="exportarCSV()"><i class="fas fa-file-csv"></i> CSV</button>
-            <button class="btn btn-secondary" onclick="refrescarDatos()" title="Sincronizar con servidor"><i class="fas fa-sync-alt"></i></button>
-            <span class="sync-indicator"><i class="fas fa-check-circle"></i> Sincronizado</span>
-        </div>
-        <div class="contadores">
-            <span class="contador-item">📊 Mostrando: <strong id="totalFiltrado">${datos.length}</strong> registros</span>
-        </div>
-        <div id="loadingListado" class="loading"><div class="spinner"></div><p>Cargando...</p></div>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>ID Personal</th><th>Apellido Paterno</th><th>Apellido Materno</th><th>Nombres</th><th>Acciones</th><th>Operaciones</th></tr></thead>
-                <tbody id="tbodyListado"></tbody>
-            </table>
-        </div>
+        ${renderSubNav()}
     `;
     cargarDatos().then(() => {
         renderTabla(datos);
@@ -867,14 +971,570 @@ function renderListado() {
 }
 
 // ============================================================
+//  FUNCIONES DE HORARIOS (integradas)
+// ============================================================
+const STORAGE_KEY_SCHEDULE = 'scheduleData';
+const HORAS_SEMANALES = 44;
+let horarios = [];
+let horariosFiltrados = null;
+
+function calcularHoras(entrada, salida, refInicio, refFin) {
+    if(!entrada || !salida) return 0;
+    
+    const [hEnt, mEnt] = entrada.split(':').map(Number);
+    const [hSal, mSal] = salida.split(':').map(Number);
+    
+    let minutos = (hSal * 60 + mSal) - (hEnt * 60 + mEnt);
+    
+    if(refInicio && refFin) {
+        const [hRI, mRI] = refInicio.split(':').map(Number);
+        const [hRF, mRF] = refFin.split(':').map(Number);
+        const refMinutos = (hRF * 60 + mRF) - (hRI * 60 + mRI);
+        if(refMinutos > 0) minutos -= refMinutos;
+    }
+    
+    if(minutos < 0) minutos += 1440;
+    
+    return Math.round((minutos / 60) * 100) / 100;
+}
+
+function calcularHorasSemanales(horariosTrabajador) {
+    let total = 0;
+    const dias = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+    
+    dias.forEach(dia => {
+        const horario = horariosTrabajador.find(h => h.dia === dia);
+        if(horario) {
+            const horas = calcularHoras(
+                horario.entrada,
+                horario.salida,
+                horario.refrigerioInicio,
+                horario.refrigerioFin
+            );
+            total += horas;
+        }
+    });
+    
+    return Math.round(total * 100) / 100;
+}
+
+function mostrarAlertaHoras(total, alertContainer) {
+    const alert = alertContainer || document.getElementById('alertFormularioHorarios');
+    if(!alert) return;
+    
+    if(total === 0) {
+        alert.style.display = 'none';
+        return;
+    }
+    
+    if(total > HORAS_SEMANALES) {
+        alert.style.display = 'block';
+        alert.className = 'alert-box alert-danger';
+        alert.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>⚠️ EXCEDE LAS ${HORAS_SEMANALES}h SEMANALES</strong><br>
+            Total: ${total}h | Exceso: ${(total - HORAS_SEMANALES).toFixed(2)}h
+        `;
+        const estado = document.getElementById('estadoHorasSemana');
+        if(estado) {
+            estado.className = 'contador-item';
+            estado.innerHTML = `⚠️ <strong style="color:#EF4444;">Excede ${HORAS_SEMANALES}h</strong>`;
+        }
+    } else if(total < HORAS_SEMANALES && total > 0) {
+        alert.style.display = 'block';
+        alert.className = 'alert-box alert-warning';
+        alert.innerHTML = `
+            <i class="fas fa-clock"></i>
+            <strong>⏳ FALTAN HORAS PARA COMPLETAR ${HORAS_SEMANALES}h</strong><br>
+            Total: ${total}h | Faltan: ${(HORAS_SEMANALES - total).toFixed(2)}h
+        `;
+        const estado = document.getElementById('estadoHorasSemana');
+        if(estado) {
+            estado.className = 'contador-item';
+            estado.innerHTML = `⏳ <strong style="color:#CA8A04;">Faltan ${(HORAS_SEMANALES - total).toFixed(2)}h</strong>`;
+        }
+    } else if(total === HORAS_SEMANALES) {
+        alert.style.display = 'block';
+        alert.className = 'alert-box alert-success';
+        alert.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            <strong>✅ HORAS COMPLETAS (${HORAS_SEMANALES}h)</strong>
+        `;
+        const estado = document.getElementById('estadoHorasSemana');
+        if(estado) {
+            estado.className = 'contador-item';
+            estado.innerHTML = `✅ <strong style="color:#10B981;">Completo (${HORAS_SEMANALES}h)</strong>`;
+        }
+    }
+}
+
+async function cargarHorarios() {
+    const loading = $('loadingHorarios');
+    if(loading) loading.classList.add('active');
+
+    try {
+        const cached = localStorage.getItem(STORAGE_KEY_SCHEDULE);
+        if(cached) {
+            try {
+                horarios = JSON.parse(cached);
+                renderHorariosTabla();
+                actualizarContadoresHorarios();
+                if(loading) loading.classList.remove('active');
+                return;
+            } catch(e) {}
+        }
+
+        const resp = await fetch(API_URL + '?action=list_schedules');
+        const texto = await resp.text();
+        let result;
+        try { result = JSON.parse(texto); } catch(e) { throw new Error('Respuesta no JSON'); }
+
+        if(result.success && result.data) {
+            horarios = result.data;
+            localStorage.setItem(STORAGE_KEY_SCHEDULE, JSON.stringify(horarios));
+            renderHorariosTabla();
+            actualizarContadoresHorarios();
+            toast(`✅ ${horarios.length} horarios cargados`, 'success');
+        } else {
+            if(cached) {
+                try {
+                    horarios = JSON.parse(cached);
+                    renderHorariosTabla();
+                    actualizarContadoresHorarios();
+                } catch(e) {
+                    horarios = [];
+                    renderHorariosTabla();
+                    actualizarContadoresHorarios();
+                }
+            } else {
+                horarios = [];
+                renderHorariosTabla();
+                actualizarContadoresHorarios();
+            }
+        }
+    } catch(e) {
+        console.error('Error cargando horarios:', e);
+        const cached = localStorage.getItem(STORAGE_KEY_SCHEDULE);
+        if(cached) {
+            try {
+                horarios = JSON.parse(cached);
+                renderHorariosTabla();
+                actualizarContadoresHorarios();
+            } catch(e2) {
+                toast('❌ Error: ' + e.message, 'error');
+            }
+        } else {
+            toast('❌ Error: ' + e.message, 'error');
+        }
+    } finally {
+        if(loading) loading.classList.remove('active');
+    }
+}
+
+function actualizarSelectTrabajadoresHorarios() {
+    const select = document.getElementById('selectTrabajadorHorarios');
+    if(!select) return;
+    
+    const trabajadores = datos.length > 0 ? datos : JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    
+    select.innerHTML = '<option value="">Seleccionar trabajador...</option>' +
+        trabajadores.map(p => `
+            <option value="${esc(p.CODE)}">
+                ${esc(p.NOMBRES||'')} ${esc(p.APE_PATERNO||'')} (${esc(p.ID_PERSONAL||'')})
+            </option>
+        `).join('');
+    
+    // Si hay un trabajador seleccionado, preseleccionarlo
+    if(trabajadorSeleccionado) {
+        select.value = trabajadorSeleccionado.CODE;
+    }
+}
+
+function renderHorariosTabla() {
+    const tbody = $('tbodyHorarios');
+    if(!tbody) return;
+
+    const mostrar = horariosFiltrados || horarios;
+
+    if(!mostrar || mostrar.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:24px;">No hay horarios registrados</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = mostrar.map((h, index) => {
+        const horas = calcularHoras(h.entrada, h.salida, h.refrigerioInicio, h.refrigerioFin);
+        let horasClass = 'badge-blue';
+        if(horas > 8) horasClass = 'badge-orange';
+        else if(horas >= 7) horasClass = 'badge-green';
+        else if(horas > 0) horasClass = 'badge-yellow';
+        
+        return `
+        <tr>
+            <td><strong>${esc(h.nombre)}</strong></td>
+            <td>${esc(h.idPersonal || '')}</td>
+            <td><span class="badge badge-purple">${esc(h.dia)}</span></td>
+            <td><strong>${h.entrada}</strong></td>
+            <td>${h.refrigerioInicio && h.refrigerioFin ? `${h.refrigerioInicio} - ${h.refrigerioFin}` : '-'}</td>
+            <td><strong>${h.salida}</strong></td>
+            <td><span class="badge ${horasClass}">${horas}h</span></td>
+            <td>
+                <button class="action-btn btn-edit" onclick="abrirEditarHorario(${index})" title="Editar">✏️</button>
+                <button class="action-btn btn-delete" onclick="eliminarHorario(${index})" title="Eliminar">🗑️</button>
+            </td>
+        </tr>
+    `}).join('');
+
+    actualizarContadoresHorarios();
+}
+
+function actualizarContadoresHorarios() {
+    const mostrar = horariosFiltrados || horarios;
+    const total = $('totalHorarios');
+    const totalHorasSemana = $('totalHorasSemana');
+    const estadoHoras = $('estadoHorasSemana');
+
+    if(total) total.textContent = mostrar.length;
+    
+    if(mostrar.length > 0 && totalHorasSemana) {
+        const trabajadores = new Set();
+        let totalHoras = 0;
+        mostrar.forEach(h => {
+            if(!trabajadores.has(h.code)) {
+                trabajadores.add(h.code);
+                const horariosTrabajador = mostrar.filter(h2 => h2.code === h.code);
+                const horas = calcularHorasSemanales(horariosTrabajador);
+                totalHoras += horas;
+            }
+        });
+        const promedio = trabajadores.size > 0 ? Math.round((totalHoras / trabajadores.size) * 100) / 100 : 0;
+        totalHorasSemana.textContent = promedio.toFixed(1);
+        
+        if(estadoHoras) {
+            if(promedio > HORAS_SEMANALES) {
+                estadoHoras.className = 'contador-item';
+                estadoHoras.innerHTML = `⚠️ <strong style="color:#EF4444;">Excede ${HORAS_SEMANALES}h</strong>`;
+            } else if(promedio < HORAS_SEMANALES && promedio > 0) {
+                estadoHoras.className = 'contador-item';
+                estadoHoras.innerHTML = `⏳ <strong style="color:#CA8A04;">Faltan ${(HORAS_SEMANALES - promedio).toFixed(2)}h</strong>`;
+            } else if(promedio === HORAS_SEMANALES) {
+                estadoHoras.className = 'contador-item';
+                estadoHoras.innerHTML = `✅ <strong style="color:#10B981;">Completo (${HORAS_SEMANALES}h)</strong>`;
+            } else {
+                estadoHoras.className = 'contador-item';
+                estadoHoras.innerHTML = `📋 <strong>Sin horarios</strong>`;
+            }
+        }
+    } else if(totalHorasSemana) {
+        totalHorasSemana.textContent = '0';
+        if(estadoHoras) {
+            estadoHoras.className = 'contador-item';
+            estadoHoras.innerHTML = `📋 <strong>Sin horarios</strong>`;
+        }
+    }
+}
+
+async function guardarHorario() {
+    const code = document.getElementById('selectTrabajadorHorarios')?.value;
+    const dia = document.getElementById('selectDiaHorarios')?.value;
+    const entrada = document.getElementById('horaEntradaHorarios')?.value;
+    const refInicio = document.getElementById('horaRefrigerioInicioHorarios')?.value || '';
+    const refFin = document.getElementById('horaRefrigerioFinHorarios')?.value || '';
+    const salida = document.getElementById('horaSalidaHorarios')?.value;
+
+    if(!code) {
+        toast('❌ Seleccione un trabajador', 'error');
+        return;
+    }
+
+    if(!entrada || !salida) {
+        toast('❌ Ingrese hora de entrada y salida', 'error');
+        return;
+    }
+
+    const trabajador = datos.find(p => p.CODE === code) || 
+                       JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]').find(p => p.CODE === code);
+    if(!trabajador) {
+        toast('❌ Trabajador no encontrado', 'error');
+        return;
+    }
+
+    const existe = horarios.some(h => h.code === code && h.dia === dia);
+    if(existe) {
+        toast(`⚠️ ${trabajador.NOMBRES} ya tiene horario para ${dia}`, 'error');
+        return;
+    }
+
+    const horariosTrabajador = horarios.filter(h => h.code === code);
+    const horasActuales = calcularHorasSemanales(horariosTrabajador);
+    const nuevasHoras = calcularHoras(entrada, salida, refInicio, refFin);
+    const totalHoras = horasActuales + nuevasHoras;
+    
+    if(totalHoras > HORAS_SEMANALES) {
+        const exceso = totalHoras - HORAS_SEMANALES;
+        if(!confirm(`⚠️ Este horario excede las ${HORAS_SEMANALES}h semanales en ${exceso.toFixed(2)}h.\n¿Desea continuar?`)) {
+            return;
+        }
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.append('action', 'create_schedule');
+        params.append('CODE', code);
+        params.append('ID_PERSONAL', trabajador.ID_PERSONAL || '');
+        params.append('NOMBRE', `${trabajador.NOMBRES||''} ${trabajador.APE_PATERNO||''}`);
+        params.append('DIA', dia);
+        params.append('HORA_ENTRADA', entrada);
+        params.append('REFRIGERIO_INICIO', refInicio);
+        params.append('REFRIGERIO_FIN', refFin);
+        params.append('HORA_SALIDA', salida);
+
+        const resp = await fetch(API_URL + '?' + params.toString());
+        const texto = await resp.text();
+        let result;
+        try { result = JSON.parse(texto); } catch(e) { result = { success: texto.includes('success') }; }
+
+        if(result.success) {
+            const nuevoHorario = {
+                code: code,
+                idPersonal: trabajador.ID_PERSONAL || '',
+                nombre: `${trabajador.NOMBRES||''} ${trabajador.APE_PATERNO||''}`,
+                dia: dia,
+                entrada: entrada,
+                refrigerioInicio: refInicio,
+                refrigerioFin: refFin,
+                salida: salida
+            };
+
+            horarios.push(nuevoHorario);
+            localStorage.setItem(STORAGE_KEY_SCHEDULE, JSON.stringify(horarios));
+            
+            renderHorariosTabla();
+            const horasMostrar = calcularHoras(entrada, salida, refInicio, refFin);
+            toast(`✅ Horario asignado a ${trabajador.NOMBRES} (${dia} ${horasMostrar}h)`, 'success');
+            
+            const nuevoTotal = horasActuales + nuevasHoras;
+            mostrarAlertaHoras(nuevoTotal);
+            
+            document.getElementById('selectTrabajadorHorarios').value = '';
+            trabajadorSeleccionado = null;
+        } else {
+            toast('❌ ' + (result.message || 'Error al guardar'), 'error');
+        }
+    } catch(e) {
+        toast('❌ Error: ' + e.message, 'error');
+    }
+}
+
+function abrirEditarHorario(index) {
+    const data = horariosFiltrados ? horariosFiltrados[index] : horarios[index];
+    if(!data) return;
+
+    const diaActual = data.dia;
+    const entradaActual = data.entrada;
+    const salidaActual = data.salida;
+    const refInicioActual = data.refrigerioInicio || '';
+    const refFinActual = data.refrigerioFin || '';
+
+    const nuevoDia = prompt('Día (LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO):', diaActual);
+    if(!nuevoDia) return;
+    const diaUpper = nuevoDia.toUpperCase().trim();
+    if(!['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO'].includes(diaUpper)) {
+        toast('❌ Día no válido', 'error');
+        return;
+    }
+
+    const nuevaEntrada = prompt('Hora de entrada (HH:MM):', entradaActual);
+    if(!nuevaEntrada) return;
+    const nuevaSalida = prompt('Hora de salida (HH:MM):', salidaActual);
+    if(!nuevaSalida) return;
+    const nuevoRefInicio = prompt('Inicio refrigerio (HH:MM) o dejar vacío:', refInicioActual) || '';
+    const nuevoRefFin = prompt('Fin refrigerio (HH:MM) o dejar vacío:', refFinActual) || '';
+
+    const horaRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if(!horaRegex.test(nuevaEntrada) || !horaRegex.test(nuevaSalida)) {
+        toast('❌ Formato de hora inválido (HH:MM)', 'error');
+        return;
+    }
+    if(nuevoRefInicio && !horaRegex.test(nuevoRefInicio)) {
+        toast('❌ Formato de refrigerio inválido', 'error');
+        return;
+    }
+    if(nuevoRefFin && !horaRegex.test(nuevoRefFin)) {
+        toast('❌ Formato de refrigerio inválido', 'error');
+        return;
+    }
+
+    const otrosHorarios = horarios.filter((h, idx) => idx !== index && h.code === data.code);
+    const horasActuales = calcularHorasSemanales(otrosHorarios);
+    const nuevasHoras = calcularHoras(nuevaEntrada, nuevaSalida, nuevoRefInicio, nuevoRefFin);
+    const totalHoras = horasActuales + nuevasHoras;
+    
+    if(totalHoras > HORAS_SEMANALES) {
+        const exceso = totalHoras - HORAS_SEMANALES;
+        if(!confirm(`⚠️ Este horario excede las ${HORAS_SEMANALES}h semanales en ${exceso.toFixed(2)}h.\n¿Desea continuar?`)) {
+            return;
+        }
+    }
+
+    actualizarHorarioEnAPI(data.code, data.dia, diaUpper, nuevaEntrada, nuevoRefInicio, nuevoRefFin, nuevaSalida);
+}
+
+async function actualizarHorarioEnAPI(code, diaAntiguo, dia, entrada, refInicio, refFin, salida) {
+    try {
+        const params = new URLSearchParams();
+        params.append('action', 'update_schedule');
+        params.append('CODE', code);
+        params.append('DIA_ANTIGUO', diaAntiguo);
+        params.append('DIA', dia);
+        params.append('HORA_ENTRADA', entrada);
+        params.append('REFRIGERIO_INICIO', refInicio || '');
+        params.append('REFRIGERIO_FIN', refFin || '');
+        params.append('HORA_SALIDA', salida);
+
+        const resp = await fetch(API_URL + '?' + params.toString());
+        const texto = await resp.text();
+        let result;
+        try { result = JSON.parse(texto); } catch(e) { result = { success: texto.includes('success') }; }
+
+        if(result.success) {
+            const horario = horarios.find(h => h.code === code && h.dia === diaAntiguo);
+            if(horario) {
+                horario.dia = dia;
+                horario.entrada = entrada;
+                horario.refrigerioInicio = refInicio || '';
+                horario.refrigerioFin = refFin || '';
+                horario.salida = salida;
+                localStorage.setItem(STORAGE_KEY_SCHEDULE, JSON.stringify(horarios));
+                renderHorariosTabla();
+                toast('✅ Horario actualizado', 'success');
+            }
+        } else {
+            toast('❌ ' + (result.message || 'Error al actualizar'), 'error');
+        }
+    } catch(e) {
+        toast('❌ Error: ' + e.message, 'error');
+    }
+}
+
+async function eliminarHorario(index) {
+    const data = horariosFiltrados ? horariosFiltrados[index] : horarios[index];
+    if(!data) return;
+
+    if(!confirm(`⚠️ ¿Eliminar horario de ${data.nombre} (${data.dia})?`)) return;
+
+    try {
+        const params = new URLSearchParams();
+        params.append('action', 'delete_schedule');
+        params.append('CODE', data.code);
+        params.append('DIA', data.dia);
+
+        const resp = await fetch(API_URL + '?' + params.toString());
+        const texto = await resp.text();
+        let result;
+        try { result = JSON.parse(texto); } catch(e) { result = { success: texto.includes('success') }; }
+
+        if(result.success) {
+            const indexReal = horarios.findIndex(h => h.code === data.code && h.dia === data.dia);
+            if(indexReal !== -1) horarios.splice(indexReal, 1);
+            localStorage.setItem(STORAGE_KEY_SCHEDULE, JSON.stringify(horarios));
+
+            if(horariosFiltrados) {
+                const filtradoIndex = horariosFiltrados.findIndex(h => h.code === data.code && h.dia === data.dia);
+                if(filtradoIndex !== -1) horariosFiltrados.splice(filtradoIndex, 1);
+            }
+
+            renderHorariosTabla();
+            toast(`🗑️ Horario eliminado`, 'success');
+        } else {
+            toast('❌ ' + (result.message || 'Error al eliminar'), 'error');
+        }
+    } catch(e) {
+        toast('❌ Error: ' + e.message, 'error');
+    }
+}
+
+function exportarHorariosCSV() {
+    const data = horariosFiltrados || horarios;
+    if(!data || data.length === 0) {
+        toast('⚠️ No hay horarios para exportar', 'error');
+        return;
+    }
+
+    try {
+        const headers = ['Trabajador', 'ID Personal', 'Día', 'Entrada', 'Refrigerio Inicio', 'Refrigerio Fin', 'Salida', 'Horas'];
+        let csv = '\uFEFF' + headers.join(',') + '\n';
+        
+        csv += data.map(h => {
+            const horas = calcularHoras(h.entrada, h.salida, h.refrigerioInicio, h.refrigerioFin);
+            return [
+                (h.nombre || '').replace(/,/g, ''),
+                (h.idPersonal || '').replace(/,/g, ''),
+                (h.dia || '').replace(/,/g, ''),
+                h.entrada || '',
+                h.refrigerioInicio || '',
+                h.refrigerioFin || '',
+                h.salida || '',
+                horas.toFixed(2)
+            ].join(',');
+        }).join('\n');
+
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `horarios_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        toast(`📊 ${data.length} horarios exportados`, 'success');
+    } catch(e) {
+        toast('❌ Error exportando: ' + e.message, 'error');
+    }
+}
+
+function limpiarFormularioHorarios() {
+    document.getElementById('selectTrabajadorHorarios').value = '';
+    document.getElementById('selectDiaHorarios').value = 'LUNES';
+    document.getElementById('horaEntradaHorarios').value = '08:00';
+    document.getElementById('horaRefrigerioInicioHorarios').value = '12:00';
+    document.getElementById('horaRefrigerioFinHorarios').value = '13:00';
+    document.getElementById('horaSalidaHorarios').value = '17:00';
+    document.getElementById('alertFormularioHorarios').style.display = 'none';
+    toast('🧹 Formulario limpiado', 'info');
+}
+
+// ============================================================
 //  INICIALIZACIÓN
 // ============================================================
 document.addEventListener('keydown', e => {
     if(e.key === 'Enter' && !e.target.matches('textarea, select')) {
-        const btn = $('btnGuardarReg');
+        const btn = document.querySelector('.btn-primary[onclick*="guardarHorario"]');
         if(btn) btn.click();
     }
 });
+
+document.addEventListener('change', function(e) {
+    if(e.target.id && e.target.id.startsWith('hora') && e.target.id.includes('Horarios')) {
+        const entrada = document.getElementById('horaEntradaHorarios')?.value;
+        const salida = document.getElementById('horaSalidaHorarios')?.value;
+        const refInicio = document.getElementById('horaRefrigerioInicioHorarios')?.value;
+        const refFin = document.getElementById('horaRefrigerioFinHorarios')?.value;
+        if(entrada && salida) {
+            const horas = calcularHoras(entrada, salida, refInicio, refFin);
+            if(horas > 0) {
+                mostrarAlertaHoras(horas);
+            }
+        }
+    }
+});
+
+const observer = new MutationObserver(function() {
+    if(document.getElementById('selectTrabajadorHorarios')) {
+        actualizarSelectTrabajadoresHorarios();
+        observer.disconnect();
+    }
+});
+observer.observe(document.getElementById('mainContent'), {childList: true, subtree: true});
 
 cambiarVista('listado');
 </script>
