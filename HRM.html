@@ -99,6 +99,7 @@
         .btn-edit:hover{color:#3B82F6}
         .btn-delete:hover{color:#EF4444}
         .btn-copy:hover{color:#8B5CF6}
+        .btn-schedule:hover{color:#8B5CF6}
 
         /* FORMULARIO */
         .form-container{background:#fff;border-radius:20px;border:1px solid #E2E8F0;padding:28px}
@@ -405,7 +406,7 @@ function renderTabla(data) {
     if(!tbody) return;
     
     if(!mostrar || mostrar.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding:24px;">Sin registros</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding:24px;">Sin registros</td></tr>`;
         return;
     }
 
@@ -421,6 +422,9 @@ function renderTabla(data) {
                 <button class="action-btn btn-delete" onclick='eliminarRegistro("${esc(item.CODE)}")' title="Eliminar">🗑️</button>
                 <button class="action-btn btn-copy" onclick='copiarDatos(${JSON.stringify(item).replace(/'/g,"&#39;")})' title="Copiar">📋</button>
             </td>
+            <td>
+                <button class="action-btn btn-schedule" onclick='verHorario(${JSON.stringify(item).replace(/'/g,"&#39;")})' title="Horario">🕐</button>
+            </td>
         </tr>
     `).join('');
 }
@@ -433,6 +437,16 @@ function actualizarContadores(data) {
     // Actualizar también el badge del header si existe
     const badge = document.querySelector('.total-badge span');
     if(badge) badge.textContent = datos.length;
+}
+
+// ============================================================
+//  NUEVA FUNCIÓN: HORARIO
+// ============================================================
+function verHorario(data) {
+    toast(`🕐 Horario de ${data.NOMBRES||''} ${data.APE_PATERNO||''}`, 'info');
+    // Aquí se puede agregar la lógica para mostrar el horario
+    // Esta función está preparada para futuras operaciones
+    console.log('Horario del trabajador:', data);
 }
 
 // ============================================================
@@ -841,7 +855,7 @@ function renderListado() {
         <div id="loadingListado" class="loading"><div class="spinner"></div><p>Cargando...</p></div>
         <div class="table-container">
             <table>
-                <thead><tr><th>ID Personal</th><th>Apellido Paterno</th><th>Apellido Materno</th><th>Nombres</th><th>Acciones</th></tr></thead>
+                <thead><tr><th>ID Personal</th><th>Apellido Paterno</th><th>Apellido Materno</th><th>Nombres</th><th>Acciones</th><th>Operaciones</th></tr></thead>
                 <tbody id="tbodyListado"></tbody>
             </table>
         </div>
